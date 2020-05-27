@@ -22,6 +22,7 @@ def read_samples(directories):
                 if file_name[-4:] == '.FFT':
                     file = open(directory + file_name, 'r', encoding = 'utf-8')
                     lines = file.readlines()
+                    file.close()
                     for index in range(1, len(lines)):
                         sample.append(int(lines[index].replace('\n', '')))
         sample = [(index, sample[index]) for index in range(len(sample))] # add index for each point
@@ -38,6 +39,17 @@ def plot_time_domain_amplitude(data, peaks, slicing_peaks):
         plot.axvline(x = slicing_peak[0], color = 'grey', linestyle = '--')              # plot slicing lines
     plot.show()
     return
+
+
+def read_heartbeat(dataset_name):
+    file = open(dataset_name + '001full.csv', 'r', encoding = 'utf-8')
+    rows = list(csv.reader(file))
+    file.close()
+    try:
+        heartbeat = int(rows[0][3].split('/')[1].split(' ')[1])
+    except:
+        heartbeat = None
+    return heartbeat
 
 
 def write_file(file, dataset_name, wave_lengths_mean, wave_lengths_std, standard_wave_length, loss, loss_2):
@@ -65,12 +77,8 @@ if __name__ == '__main__':
         sample = sample[1500:]
 
         # heartbeat
-        file = open(dataset_name + '001full.csv', 'r', encoding = 'utf-8')
-        rows = list(csv.reader(file))
-        file.close()
-        try:
-            heartbeat = int(rows[0][3].split('/')[1].split(' ')[1])
-        except:
+        heartbeat = read_heartbeat(dataset_name)
+        if heartbeat is None:
             print('skipped')
             continue
         standard_wave_length = heartbeat / 60 * 500
