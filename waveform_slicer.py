@@ -90,22 +90,23 @@ class WaveformSlicer:
         return smallest_cluster_label
 
 
-    # 找出波谷的index(基於cluster_labels)
-    def _find_wave_trough_indexes(self, cluster_labels, wave_crest_label, wave_trough_label):
+    # 找出波谷以及波峰的index(基於cluster_labels)
+    def _find_wave_trough_crest_indexes(self, cluster_labels, wave_trough_label, wave_crest_label):
         wave_trough_indexes = []
+        wave_crest_indexes = []
         for index in range(1, len(cluster_labels)):
             if cluster_labels[index - 1] == wave_trough_label and cluster_labels[index] == wave_crest_label:
                 wave_trough_indexes.append(index - 1)
-        return wave_trough_indexes
+                wave_crest_indexes.append(index)
+        return (wave_trough_indexes, wave_crest_indexes)
 
 
-    # 找出切割波長的轉折點
-    def _find_slicing_peaks(self, peaks, slicing_peak_indexes):
-        slicing_peaks = []
+    def _find_filtered_peaks(self, peaks, filtration_indexes):
+        filtered_peaks = []
         for index in range(len(peaks)):
-            if index in slicing_peak_indexes:
-                slicing_peaks.append(peaks[index])
-        return slicing_peaks
+            if index in filtration_indexes:
+                filtered_peaks.append(peaks[index])
+        return filtered_peaks
 
 
     # 根據切割波長的轉折點來切割data
@@ -126,9 +127,10 @@ class WaveformSlicer:
         self.cluster_labels, self.cluster_centers = self._find_best_cluster_labels_and_centers(peaks = self.peaks)
         self.wave_crest_label = self._find_largest_cluster_label(cluster_centers = self.cluster_centers)
         self.wave_trough_label = self._find_smallest_cluster_label(cluster_centers = self.cluster_centers)
-        self.slicing_peak_indexes = self._find_wave_trough_indexes(cluster_labels = self.cluster_labels, wave_crest_label = self.wave_crest_label, wave_trough_label = self.wave_trough_label)
-        self.slicing_peaks = self._find_slicing_peaks(peaks = self.peaks, slicing_peak_indexes = self.slicing_peak_indexes)
-        self.waves = self._slice_data(data = self.data, slicing_peaks = self.slicing_peaks)
+        self.wave_trough_indexes, self.wave_crest_indexes = self._find_wave_trough_crest_indexes(cluster_labels = self.cluster_labels, wave_trough_label = self.wave_trough_label, wave_crest_label = self.wave_crest_label)
+        self.wave_troughs = self._find_filtered_peaks(peaks = self.peaks, filtration_indexes = self.wave_trough_indexes)
+        self.wave_crests = self._find_filtered_peaks(peaks = self.peaks, filtration_indexes = self.wave_crest_indexes)
+        self.waves = self._slice_data(data = self.data, slicing_peaks = self.wave_troughs)
         return
 
 
@@ -136,8 +138,12 @@ class WaveformSlicer:
         return self.peaks
 
 
-    def get_slicing_peaks(self):
-        return self.slicing_peaks
+    def get_wave_troughs(self):
+        return self.wave_troughs
+
+
+    def get_wave_crests(self):
+        return self.wave_crests
 
 
     def get_waves(self):

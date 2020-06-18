@@ -12,6 +12,10 @@ STATISTICS_FILE_HEADER = ['folder_name', 'L/R', 'age', 'gender', 'number_of_wave
                           'difference_between_heartbeat_and_average(mse)', 'difference_between_heartbeat_and_average(mse_sqrt)', 'difference_between_heartbeat_and_average(me)',
                           'difference_between_pulse_and_average(mse)', 'difference_between_pulse_and_average(mse_sqrt)', 'difference_between_pulse_and_average(me)']
 RESULT_FILE_HEADER = ['folder_name', 'number_of_waves', 'valleys_x']
+FILE_HEADER = ['folder_name', 'L/R', 'age', 'gender', 'number_of_waves', 'crests_x', 'valleys_x',
+               'wavelengths_avg', 'wavelengths_std', 'wavelengths(max-min)',
+               'amplitudes_v2c_avg', 'amplitudes_v2c_std', 'amplitudes_v2c(max-min)',
+               'amplitudes_c2v_avg', 'amplitudes_c2v_std', 'amplitudes_c2v(max-min)']
 
 # ROOT_PATHS = ['datasets/1000/', 'datasets/1015/', 'datasets/Archive/']
 ROOT_PATHS = ['datasets/Archive/']
@@ -112,9 +116,11 @@ if __name__ == '__main__':
     os.mkdir(f'results_{START_TIME}')
     statistics_file = open(f'results_{START_TIME}/result.csv', 'w', encoding = 'utf_8_sig')
     result_file = open(f'results_{START_TIME}/result2.csv', 'w', encoding = 'utf_8_sig')
+    file = open(f'results_{START_TIME}/result3.csv', 'w', encoding = 'utf_8_sig')
 
     write_csv_file(statistics_file, STATISTICS_FILE_HEADER)
     write_csv_file(result_file, RESULT_FILE_HEADER)
+    write_csv_file(file, FILE_HEADER)
 
     for sample_index, sample in enumerate(samples):
         dataset_path = directories[sample_index]
@@ -143,7 +149,8 @@ if __name__ == '__main__':
         slicer = WaveformSlicer()
         slicer.fit(sample)
         peaks = slicer.get_peaks()
-        slicing_peaks = slicer.get_slicing_peaks()
+        slicing_peaks = slicer.get_wave_troughs()
+        wave_crests = slicer.get_wave_crests()
 
         patient_information = dataset_name, hand, gender, age, heartbeat, round(pulse_frequency * 60)
         plot_time_domain_amplitude(sample, peaks, slicing_peaks, patient_information, IS_FIGURE_SHOWN)
@@ -166,11 +173,28 @@ if __name__ == '__main__':
 
         slicing_peak_indexes = [str(slicing_peak[0] - BIAS) for slicing_peak in slicing_peaks]
         slicing_peak_indexes = ', '.join(slicing_peak_indexes)
+        wave_crest_indexes = [str(wave_crest[0] - BIAS) for wave_crest in wave_crests]
+        wave_crest_indexes = ', '.join(wave_crest_indexes)
+
+        trough_to_crest_differences = []
+        crest_to_trough_differences = []
+        for index in range(len(slicing_peaks) - 1):
+            trough_to_crest_differences.append(wave_crests[index][1] - slicing_peaks[index][1])
+            crest_to_trough_differences.append(wave_crests[index][1] - slicing_peaks[index + 1][1])
+
+        trough_to_crest_differences_mean = statistics.mean(trough_to_crest_differences)
+        trough_to_crest_differences_std = statistics.stdev(trough_to_crest_differences)
+        crest_to_trough_differences_mean = statistics.mean(crest_to_trough_differences)
+        crest_to_trough_differences_std = statistics.stdev(crest_to_trough_differences)
 
         write_csv_file(statistics_file, [dataset_name, hand, age, gender, number_of_waves,
                                          round(wave_lengths_mean), round(wave_lengths_std), round(standard_wave_length), round(standard_pulse_wave_length),
                                          round(loss_mse), round(loss_mse_sqrt), round(loss_me),
                                          round(loss_mse_pulse), round(loss_mse_sqrt_pulse), round(loss_me_pulse)])
         write_csv_file(result_file, [dataset_name, len(slicing_peaks) - 1, f'"{slicing_peak_indexes}"'])
+        write_csv_file(file, [dataset_name, hand, age, gender, number_of_waves, f'"{wave_crest_indexes}"', f'"{slicing_peak_indexes}"',
+                              round(wave_lengths_mean), round(wave_lengths_std), max(wave_lengths) - min(wave_lengths),
+                              round(trough_to_crest_differences_mean), round(trough_to_crest_differences_std), round(max(trough_to_crest_differences) - min(trough_to_crest_differences)),
+                              round(crest_to_trough_differences_mean), round(crest_to_trough_differences_std), round(max(crest_to_trough_differences) - min(crest_to_trough_differences))])
     statistics_file.close()
     result_file.close()
