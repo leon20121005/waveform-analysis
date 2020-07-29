@@ -1,11 +1,21 @@
+import statistics
 from scipy import signal
 from sklearn import cluster
 
-IS_VERBOSE = True
+IS_VERBOSE = False
 
 class WaveformSlicer:
 
     def __init__(self):
+        self.data = None
+        self.filtered_data = None
+        self.peaks = None
+        self.wave_troughs = None
+        self.wave_crests = None
+        self.waves = None
+        self.differences = None
+        self.selected_wave_indexes = None
+        self.status = None
         return
 
 
@@ -113,10 +123,39 @@ class WaveformSlicer:
     def _slice_data(self, data, slicing_peaks):
         waves = []
         slicing_peaks_x = [slicing_peak[0] for slicing_peak in slicing_peaks]
-        slicing_peaks_x = [-1] + slicing_peaks_x
         for index in range(len(slicing_peaks_x) - 1):
-            waves.append(data[slicing_peaks_x[index] + 1:slicing_peaks_x[index + 1]])
+            waves.append(data[slicing_peaks_x[index]:slicing_peaks_x[index + 1]])
         return waves
+
+
+    def _find_selected_wave_indexes(self, differences):
+        wave_lengths = differences['trough_to_trough_x']
+        trough_to_crest_differences = differences['trough_to_crest_y']
+        crest_to_trough_differences = differences['crest_to_trough_y']
+        selected_wave_indexes = [wave_index for wave_index in range(1, len(self.waves) + 1)]
+        for index in range(len(wave_lengths) - 1):
+            if wave_lengths[index + 1] - wave_lengths[index] > wave_lengths[index] / 3:
+                if index in selected_wave_indexes:
+                    selected_wave_indexes.remove(index)
+        for index in range(len(trough_to_crest_differences) - 1):
+            if trough_to_crest_differences[index + 1] - trough_to_crest_differences[index] > trough_to_crest_differences[index] / 3:
+                if index in selected_wave_indexes:
+                    selected_wave_indexes.remove(index)
+        for index in range(len(crest_to_trough_differences) - 1):
+            if crest_to_trough_differences[index + 1] - crest_to_trough_differences[index] > crest_to_trough_differences[index] / 3:
+                if index in selected_wave_indexes:
+                    selected_wave_indexes.remove(index)
+        return selected_wave_indexes
+
+
+    def _determine_status(self, wave_lengths_std, selected_wave_indexes, waves):
+        if wave_lengths_std >= 80:
+            status = 0 # abnormal
+        elif len(selected_wave_indexes) != len(waves):
+            status = 1 # uncertain
+        else:
+            status = 2 # normal
+        return status
 
 
     def fit(self, data):
@@ -131,6 +170,14 @@ class WaveformSlicer:
         self.wave_troughs = self._find_filtered_peaks(peaks = self.peaks, filtration_indexes = self.wave_trough_indexes)
         self.wave_crests = self._find_filtered_peaks(peaks = self.peaks, filtration_indexes = self.wave_crest_indexes)
         self.waves = self._slice_data(data = self.data, slicing_peaks = self.wave_troughs)
+
+        self.differences = dict()
+        self.differences['trough_to_trough_x'] = [wave[-1][0] - wave[0][0] + 1 for wave in self.waves]
+        self.differences['trough_to_crest_y'] = [self.wave_crests[index][1] - self.wave_troughs[index][1]     for index in range(len(self.wave_troughs) - 1)]
+        self.differences['crest_to_trough_y'] = [self.wave_crests[index][1] - self.wave_troughs[index + 1][1] for index in range(len(self.wave_troughs) - 1)]
+
+        self.selected_wave_indexes = self._find_selected_wave_indexes(self.differences)
+        self.status = self._determine_status(statistics.stdev(self.differences['trough_to_trough_x']), self.selected_wave_indexes, self.waves)
         return
 
 
@@ -148,6 +195,29 @@ class WaveformSlicer:
 
     def get_waves(self):
         return self.waves
+
+
+    def get_differences(self):
+        return self.differences
+
+
+    def get_status(self):
+        return self.status
+
+
+    def is_available(self):
+        return True if self.status == 2 else False
+
+
+    def get_selection(self):
+        wave_boundaries = [[wave[0], wave[-1]] for wave in self.waves]
+        if self.status == 2:
+            selected_wave_boundaries = wave_boundaries
+        elif self.status == 1:
+            selected_wave_boundaries = [wave_boundaries[selected_wave_index - 1] for selected_wave_index in self.selected_wave_indexes]
+        elif self.status == 0:
+            selected_wave_boundaries = []
+        return selected_wave_boundaries
 
 
 if __name__ == '__main__':
